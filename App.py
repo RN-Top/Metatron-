@@ -1,121 +1,148 @@
 import streamlit as st
-import numpy as np
-import plotly.graph_objects as go
+import streamlit.components.v1 as components
 
-st.set_page_config(layout="wide", page_title="3D Metatron's Cube")
+st.set_page_config(layout="wide", page_title="Metatron's Cube 3D")
 st.title("Metatron's Cube — 3D Sacred Geometry Engine")
 
-# Sidebar Controls
-st.sidebar.header("Geometry Controls")
-show_all_78 = st.sidebar.checkbox("Show All 78 Chords", value=True)
-show_platonic = st.sidebar.checkbox("Highlight Dual Platonic Framework (Cube + Octahedron)", value=True)
-sphere_size = st.sidebar.slider("Sphere Scale", 0.05, 0.3, 0.12)
-rotation_speed = st.sidebar.slider("Line Width", 1, 6, 2)
+# Three.js 3D Metatron's Cube Engine (No external pip packages needed)
+threejs_metatron_code = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #080810; font-family: sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        #legend {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            color: #00ffff;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            pointer-events: none;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <div id="legend">
+        <b>3D Metatron's Cube</b><br>
+        • 13 Fruit of Life Nodes<br>
+        • 78 Interconnecting Vectors<br>
+        • Platonic Hexahedron Dual
+    </div>
+    <div id="canvas-container"></div>
 
-# 1. Generate the 13 Sphere Centers of 3D Metatron's Cube (Cuboctahedron + Center)
-# 1 center + 12 vertices of a cuboctahedron
-c_center = np.array([[0.0, 0.0, 0.0]])
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 0, 4.5);
 
-# 12 vertices defined by permutations of (±1, ±1, 0)
-v = []
-for s1 in [-1.0, 1.0]:
-    for s2 in [-1.0, 1.0]:
-        v.append([s1, s2, 0.0])
-        v.append([s1, 0.0, s2])
-        v.append([0.0, s1, s2])
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-vertices = np.array(v)
-all_nodes = np.vstack([c_center, vertices])
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
 
-# 2. Build 3D Spheres (Fruit of Life Nodes)
-phi = np.linspace(0, np.pi, 15)
-theta = np.linspace(0, 2 * np.pi, 15)
-phi, theta = np.meshgrid(phi, theta)
+        // Group container for complete rotation
+        const metatronGroup = new THREE.Group();
+        scene.add(metatronGroup);
 
-sphere_traces = []
-for idx, (x0, y0, z0) in enumerate(all_nodes):
-    xs = x0 + sphere_size * np.sin(phi) * np.cos(theta)
-    ys = y0 + sphere_size * np.sin(phi) * np.sin(theta)
-    zs = z0 + sphere_size * np.cos(phi)
-    
-    color = "gold" if idx == 0 else "#00e5ff"
-    sphere_traces.append(
-        go.Surface(
-            x=xs, y=ys, z=zs,
-            colorscale=[[0, color], [1, color]],
-            showscale=False,
-            opacity=0.85,
-            hoverinfo="skip"
-        )
-    )
+        // 1. Generate the 13 Sphere Centers (Cuboctahedron / Fruit of Life in 3D)
+        const nodes = [new THREE.Vector3(0, 0, 0)];
+        const scale = 1.3;
 
-# 3. Build All 78 Connecting Chords
-edge_traces = []
-if show_all_78:
-    lx, ly, lz = [], [], []
-    for i in range(len(all_nodes)):
-        for j in range(i + 1, len(all_nodes)):
-            p1 = all_nodes[i]
-            p2 = all_nodes[j]
-            lx.extend([p1[0], p2[0], None])
-            ly.extend([p1[1], p2[1], None])
-            lz.extend([p1[2], p2[2], None])
+        // 12 outer vertices of a cuboctahedron (normalized permutations of [±1, ±1, 0])
+        const perm = [-1, 1];
+        for (let s1 of perm) {
+            for (let s2 of perm) {
+                nodes.push(new THREE.Vector3(s1 * scale, s2 * scale, 0));
+                nodes.push(new THREE.Vector3(s1 * scale, 0, s2 * scale));
+                nodes.push(new THREE.Vector3(0, s1 * scale, s2 * scale));
+            }
+        }
 
-    edge_traces.append(
-        go.Scatter3d(
-            x=lx, y=ly, z=lz,
-            mode="lines",
-            line=dict(color="rgba(0, 229, 255, 0.35)", width=rotation_speed),
-            hoverinfo="skip",
-            name="78 Metatron Vectors"
-        )
-    )
+        // 2. Add Spheres
+        const sphereGeo = new THREE.SphereGeometry(0.12, 24, 24);
+        const centerMat = new THREE.MeshBasicMaterial({ color: 0xffd700, wireframe: false });
+        const nodeMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, wireframe: false });
 
-# 4. Optional: Highlight the Hexahedron (Cube) Inner Framework
-if show_platonic:
-    # 8 corners of inscribed cube
-    cube_nodes = []
-    for cx in [-1.0, 1.0]:
-        for cy in [-1.0, 1.0]:
-            for cz in [-1.0, 1.0]:
-                cube_nodes.append([cx, cy, cz])
-    cube_nodes = np.array(cube_nodes) * 0.7
-    
-    cube_edges = [
-        (0,1),(1,3),(3,2),(2,0),
-        (4,5),(5,7),(7,6),(6,4),
-        (0,4),(1,5),(2,6),(3,7)
-    ]
-    cx, cy, cz = [], [], []
-    for e in cube_edges:
-        cx.extend([cube_nodes[e[0]][0], cube_nodes[e[1]][0], None])
-        cy.extend([cube_nodes[e[0]][1], cube_nodes[e[1]][1], None])
-        cz.extend([cube_nodes[e[0]][2], cube_nodes[e[1]][2], None])
+        nodes.forEach((pos, idx) => {
+            const mesh = new THREE.Mesh(sphereGeo, idx === 0 ? centerMat : nodeMat);
+            mesh.position.copy(pos);
+            metatronGroup.add(mesh);
+        });
 
-    edge_traces.append(
-        go.Scatter3d(
-            x=cx, y=cy, z=cz,
-            mode="lines",
-            line=dict(color="#ff007f", width=rotation_speed + 2),
-            name="Inscribed Hexahedron"
-        )
-    )
+        // 3. Connect All 78 Lines (Every node to every node)
+        const lineMat = new THREE.LineBasicMaterial({
+            color: 0x0088ff,
+            transparent: true,
+            opacity: 0.35
+        });
 
-fig = go.Figure(data=sphere_traces + edge_traces)
+        const lineGeo = new THREE.BufferGeometry();
+        const positions = [];
 
-fig.update_layout(
-    scene=dict(
-        bgcolor="#0a0a0f",
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-        zaxis=dict(visible=False),
-        camera=dict(
-            eye=dict(x=1.8, y=1.8, z=1.4)
-        )
-    ),
-    paper_bgcolor="#0a0a0f",
-    margin=dict(l=0, r=0, t=10, b=10),
-    showlegend=False
-)
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+                positions.push(nodes[i].x, nodes[i].y, nodes[i].z);
+                positions.push(nodes[j].x, nodes[j].y, nodes[j].z);
+            }
+        }
+        lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        const allLines = new THREE.LineSegments(lineGeo, lineMat);
+        metatronGroup.add(allLines);
 
-st.plotly_chart(fig, use_container_width=True)
+        // 4. Inscribed Platonic Hexahedron (Cube)
+        const cubeMat = new THREE.LineBasicMaterial({
+            color: 0xff007f,
+            linewidth: 2,
+            transparent: true,
+            opacity: 0.85
+        });
+
+        const cubeGeo = new THREE.BoxGeometry(scale * 1.05, scale * 1.05, scale * 1.05);
+        const cubeEdges = new THREE.EdgesGeometry(cubeGeo);
+        const cubeLines = new THREE.LineSegments(cubeEdges, cubeMat);
+        metatronGroup.add(cubeLines);
+
+        // 5. Inscribed Octahedron
+        const octGeo = new THREE.OctahedronGeometry(scale * 1.35);
+        const octEdges = new THREE.EdgesGeometry(octGeo);
+        const octMat = new THREE.LineBasicMaterial({
+            color: 0x00ff88,
+            transparent: true,
+            opacity: 0.75
+        });
+        const octLines = new THREE.LineSegments(octEdges, octMat);
+        metatronGroup.add(octLines);
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            metatronGroup.rotation.x += 0.003;
+            metatronGroup.rotation.y += 0.005;
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
+"""
+
+components.html(threejs_metatron_code, height=720, scrolling=False)
