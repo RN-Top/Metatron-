@@ -1,46 +1,71 @@
 import streamlit as st
 import numpy as np
-import plotly.graph_objects as go
+import pandas as pd
+import pydeck as pdk
 
+st.set_page_config(layout="wide", page_title="Metatron's Cube 3D")
 st.title("Live 3D Metatron's Cube")
 
-# 1. Define the 13 centers of the Fruit of Life
-centers = [(0, 0, 0)]
+# 1. 13 Spheres (Centers) of Metatron's Cube
+coords = [[0.0, 0.0, 0.0]]
+# Inner ring (6 points)
 for i in range(6):
-    angle = i * np.pi / 3
-    centers.append((np.cos(angle), np.sin(angle), 0))
-outer_r = np.sqrt(3)
+    a = i * np.pi / 3
+    coords.append([float(np.cos(a)), float(np.sin(a)), 0.0])
+# Outer ring (6 points)
+r_out = np.sqrt(3)
 for i in range(6):
-    angle = i * np.pi / 3 + np.pi / 6
-    centers.append((outer_r * np.cos(angle), outer_r * np.sin(angle), 0))
+    a = i * np.pi / 3 + np.pi / 6
+    coords.append([float(r_out * np.cos(a)), float(r_out * np.sin(a)), 0.0])
 
-def get_sphere(center, radius=0.1, resolution=20):
-    phi = np.linspace(0, 2*np.pi, resolution)
-    theta = np.linspace(0, np.pi, resolution)
-    theta, phi = np.meshgrid(theta, phi)
-    x = center[0] + radius * np.sin(theta) * np.cos(phi)
-    y = center[1] + radius * np.sin(theta) * np.sin(phi)
-    z = center[2] + radius * np.cos(theta)
-    return x, y, z
+pts = np.array(coords)
 
-traces = []
-for center in centers:
-    x, y, z = get_sphere(center)
-    traces.append(go.Surface(x=x, y=y, z=z, colorscale="Viridis", showscale=False))
+# 2. Build full interconnection lines
+line_data = []
+for i in range(len(pts)):
+    for j in range(i + 1, len(pts)):
+        line_data.append({
+            "start": [pts[i][0], pts[i][1], pts[i][2]],
+            "end": [pts[j][0], pts[j][1], pts[j][2]],
+            "color": [0, 255, 255, 180]
+        })
 
-points = np.array(centers)
-lines = []
-for i in range(len(points)):
-    for j in range(i+1, len(points)):
-        p1 = points[i]
-        p2 = points[j]
-        dist = np.linalg.norm(p1 - p2)
-        if np.isclose(dist, 1.0) or np.isclose(dist, outer_r):
-            lines.append(go.Scatter3d(x=[p1[0], p2[0]], y=[p1[1], p2[1]], z=[p1[2], p2[2]],
-                                      mode='lines', line=dict(color='cyan', width=4)))
+nodes_df = pd.DataFrame({
+    "x": pts[:, 0],
+    "y": pts[:, 1],
+    "z": pts[:, 2],
+    "radius": [0.12] * len(pts)
+})
 
-fig = go.Figure(data=traces + lines)
-fig.update_layout(scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False)),
-                  showlegend=False, margin=dict(l=0, r=0, t=0, b=0))
+# 3. Render 3D layers
+node_layer = pdk.Layer(
+    "ScatterplotLayer",
+    data=nodes_df,
+    get_position="[x, y, z]",
+    get_radius="radius * 1000",
+    get_fill_color=[255, 64, 129, 230],
+    pickable=True
+)
 
-st.plotly_chart(fig, use_container_width=True)
+line_layer = pdk.Layer(
+    "LineLayer",
+    data=pd.DataFrame(line_data),
+    get_source_position="start",
+    get_target_position="end",
+    get_color="color",
+    get_width=3
+)
+
+view_state = pdk.ViewState(
+    latitude=0,
+    longitude=0,
+    zoom=14,
+    pitch=45,
+    bearing=30
+)
+
+st.pydeck_chart(pdk.Deck(
+    layers=[line_layer, node_layer],
+    initial_view_state=view_state,
+    views=[pdk.View(type="OrbitView", controller=True)]
+))
